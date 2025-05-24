@@ -86,24 +86,14 @@ export function AppSidebar({ ...props }) {
         icon: ShoppingBag,
         isActive: false,
       },
-      {
-        title: "Purchase Return",
-        url: "/purchase-return",
-        icon: ShoppingBag,
-        isActive: false,
-      },
+
       {
         title: "Dispatch",
         url: "/dispatch",
         icon: ShoppingBag,
         isActive: false,
       },
-      {
-        title: "Dispatch Return",
-        url: "/dispatch-return",
-        icon: ShoppingBag,
-        isActive: false,
-      },
+
       {
         title: "Stock View",
         url: "/stock-view",

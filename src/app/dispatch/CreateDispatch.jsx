@@ -1,9 +1,26 @@
-import { fetchPurchaseById, PURCHASE_CREATE, PURCHASE_EDIT_LIST } from "@/api";
+import {
+  DISPATCH_CREATE,
+  DISPATCH_EDIT_LIST,
+  DISPATCH_SUB_DELETE,
+  fetchDispatchById,
+} from "@/api";
 import apiClient from "@/api/axios";
 import usetoken from "@/api/usetoken";
 import Page from "@/app/dashboard/page";
+import { decryptId } from "@/components/common/Encryption";
 import { MemoizedProductSelect } from "@/components/common/MemoizedProductSelect";
 import { MemoizedSelect } from "@/components/common/MemoizedSelect";
+import Loader from "@/components/loader/Loader";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,57 +37,57 @@ import { ButtonConfig } from "@/config/ButtonConfig";
 import { useToast } from "@/hooks/use-toast";
 import {
   useFetchBuyers,
+  useFetchDispatchRef,
   useFetchGoDown,
   useFetchItems,
-  useFetchPurchaseRef,
 } from "@/hooks/useApi";
-import { ArrowLeft, MinusCircle, PlusCircle, SquarePlus } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  Loader2,
+  MinusCircle,
+  PlusCircle,
+  SquarePlus,
+  Trash2,
+} from "lucide-react";
 import moment from "moment";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import BuyerForm from "../master/buyer/CreateBuyer";
 import CreateItem from "../master/item/CreateItem";
-import { useQuery } from "@tanstack/react-query";
-import { decryptId } from "@/components/common/Encryption";
-const BranchHeader = () => {
-  return (
-    <div
-      className={`flex sticky top-0 z-10 border border-gray-200 rounded-lg justify-between items-start gap-8 mb-2 ${ButtonConfig.cardheaderColor} p-4 shadow-sm`}
-    >
-      <div className="flex-1">
-        <h1 className="text-lg font-bold text-gray-800">Create Purchase</h1>
-      </div>
-    </div>
-  );
-};
-
-const CreatePurchase = () => {
+const CreateDispatch = () => {
   const { id } = useParams();
   const decryptedId = decryptId(id);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteItemId, setDeleteItemId] = useState(null);
 
+  const userType = useSelector((state) => state.auth.user_type);
   const editId = Boolean(id);
   const { toast } = useToast();
   const navigate = useNavigate();
   const boxInputRefs = useRef([]);
   const today = moment().format("YYYY-MM-DD");
   const [isLoading, setIsLoading] = useState(false);
+
   const token = usetoken();
 
   const [formData, setFormData] = useState({
-    purchase_date: today,
-    purchase_buyer_id: "",
-    purchase_ref_no: "",
-    purchase_vehicle_no: "",
-    purchase_remark: "",
-    purchase_status: editId ? "" : null,
+    dispatch_date: today,
+    dispatch_buyer_id: "",
+    dispatch_ref_no: "",
+    dispatch_vehicle_no: "",
+    dispatch_buyer_city: "",
+    dispatch_remark: "",
+    dispatch_status: editId ? "" : null,
   });
 
   const [invoiceData, setInvoiceData] = useState([
     {
       id: editId ? "" : null,
-      purchase_sub_item_id: "",
-      purchase_sub_godown_id: "",
-      purchase_sub_box: "",
+      dispatch_sub_item_id: "",
+      dispatch_sub_godown_id: "",
+      dispatch_sub_box: "",
       item_brand: "",
       item_size: "",
       avaiable_box: "",
@@ -80,9 +97,9 @@ const CreatePurchase = () => {
     setInvoiceData((prev) => [
       ...prev,
       {
-        purchase_sub_item_id: "",
-        purchase_sub_godown_id: "",
-        purchase_sub_box: "",
+        dispatch_sub_item_id: "",
+        dispatch_sub_godown_id: "",
+        dispatch_sub_box: "",
       },
     ]);
   }, []);
@@ -100,63 +117,58 @@ const CreatePurchase = () => {
     }
   };
   const {
-    data: purchaseByid,
+    data: dispatchByid,
+    isFetching,
     isError,
     refetch,
   } = useQuery({
-    queryKey: ["purchaseByid", id],
-    queryFn: () => fetchPurchaseById(id, token),
+    queryKey: ["dispatchByid", id],
+    queryFn: () => fetchDispatchById(id, token),
     enabled: !!id,
   });
-  console.log(purchaseByid, "purchaseByid");
   useEffect(() => {
-    if (editId && purchaseByid?.purchase) {
-      console.log("daata");
+    if (editId && dispatchByid?.dispatch) {
+      console.log(dispatchByid.dispatch.dispatch_ref_no);
       setFormData({
-        purchase_date: purchaseByid.purchase.purchase_date || "",
-        purchase_buyer_name: purchaseByid.buyer.buyer_name || "",
-        purchase_buyer_id: purchaseByid.purchase.purchase_buyer_id || "",
-        purchase_buyer_city: purchaseByid.buyer.buyer_city || "",
-        purchase_ref_no: purchaseByid.purchase.purchase_ref_no || "",
-        purchase_vehicle_no: purchaseByid.purchase.purchase_vehicle_no || "",
-        purchase_remark: purchaseByid.purchase.purchase_remark || "",
-        purchase_status: purchaseByid.purchase.purchase_status || "",
+        dispatch_date: dispatchByid.dispatch.dispatch_date || "",
+        dispatch_buyer_id: dispatchByid.dispatch.dispatch_buyer_id || "",
+        dispatch_buyer_city: dispatchByid.buyer.buyer_city || "",
+        dispatch_ref_no: dispatchByid.dispatch.dispatch_ref_no || "",
+        dispatch_vehicle_no: dispatchByid.dispatch.dispatch_vehicle_no || "",
+        dispatch_remark: dispatchByid.dispatch.dispatch_remark || "",
+        dispatch_status: dispatchByid.dispatch.dispatch_status || "",
       });
 
       // Set invoice line items
-      const mappedData = Array.isArray(purchaseByid.purchaseSub)
-        ? purchaseByid.purchaseSub.map((sub) => ({
+      const mappedData = Array.isArray(dispatchByid.dispatchSub)
+        ? dispatchByid.dispatchSub.map((sub) => ({
             id: sub.id || "",
-            purchase_sub_item_id: sub.purchase_sub_item_id || "",
-            purchase_sub_box: sub.purchase_sub_box || "",
+            dispatch_sub_item_id: sub.dispatch_sub_item_id || "",
+            dispatch_sub_box: sub.dispatch_sub_box || "",
             item_brand: sub.item_brand || "",
             item_size: sub.item_size || "",
-            purchase_sub_item: sub.item_name || "",
-            purchase_sub_weight: sub.item_weight || "",
-            purchase_sub_godown_id: sub.purchase_sub_godown_id,
-            avaiable_box: "",
+            dispatch_sub_godown_id: sub.dispatch_sub_godown_id,
           }))
         : [
             {
-              purchase_sub_item_id: "",
-              purchase_sub_box: "",
+              dispatch_sub_item_id: "",
+              dispatch_sub_box: "",
               item_brand: "",
               item_size: "",
-              purchase_sub_item: "",
-              purchase_sub_weight: "",
-              purchase_sub_godown_id: "",
+
+              dispatch_sub_godown_id: "",
               avaiable_box: "",
             },
           ];
 
       setInvoiceData(mappedData);
     }
-  }, [editId, purchaseByid]);
+  }, [editId, dispatchByid]);
 
-  const { data: buyerData } = useFetchBuyers();
-  const { data: itemsData } = useFetchItems();
-  const { data: godownData } = useFetchGoDown();
-  const { data: purchaseRef } = useFetchPurchaseRef();
+  const { data: buyerData, isLoading: loadingbuyer } = useFetchBuyers();
+  const { data: itemsData, isLoading: loadingitem } = useFetchItems();
+  const { data: godownData, isLoading: loadinggodown } = useFetchGoDown();
+  const { data: dispatchRef, isLoading: loadingref } = useFetchDispatchRef();
 
   const handlePaymentChange = (selectedValue, rowIndex, fieldName) => {
     let value;
@@ -168,10 +180,9 @@ const CreatePurchase = () => {
     }
     const updatedData = [...invoiceData];
 
-    if (fieldName == "purchase_sub_item_id") {
+    if (fieldName == "dispatch_sub_item_id") {
       updatedData[rowIndex][fieldName] = value;
       const selectedItem = itemsData?.items?.find((item) => item.id == value);
-      console.log(selectedItem, "selectedItem");
       if (selectedItem) {
         updatedData[rowIndex]["item_size"] = selectedItem.item_size;
         updatedData[rowIndex]["item_brand"] = selectedItem.item_brand;
@@ -185,7 +196,7 @@ const CreatePurchase = () => {
 
       setInvoiceData(updatedData);
     } else {
-      if (["purchase_sub_box"].includes(fieldName)) {
+      if (["dispatch_sub_box"].includes(fieldName)) {
         if (!/^\d*$/.test(value)) {
           console.log("Invalid input. Only digits are allowed.");
           return;
@@ -199,32 +210,44 @@ const CreatePurchase = () => {
 
   const handleInputChange = (e, field) => {
     const value = e.target ? e.target.value : e;
-    console.log(value);
     let updatedFormData = { ...formData, [field]: value };
+
+    if (field == "dispatch_buyer_id") {
+      console.log(value, "value");
+
+      const selectedBuyer = buyerData?.buyers.find(
+        (buyer) => buyer.id == value
+      );
+      console.log(selectedBuyer, "selectedBuyer");
+      if (selectedBuyer) {
+        updatedFormData.dispatch_buyer_city = selectedBuyer.buyer_city;
+      } else {
+        updatedFormData.dispatch_buyer_city = "";
+      }
+    }
 
     setFormData(updatedFormData);
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     const missingFields = [];
-    if (!formData.purchase_date) missingFields.push("Purchase Date");
-    if (!formData.purchase_buyer_id) missingFields.push("Buyer Id");
-    if (!formData.purchase_ref_no) missingFields.push("Bill Ref No");
-    if (!formData.purchase_status && editId) {
+    if (!formData.dispatch_date) missingFields.push("Dispatch Date");
+    if (!formData.dispatch_buyer_id) missingFields.push("Buyer Id");
+    if (!formData.dispatch_ref_no) missingFields.push("Bill Ref No");
+    if (!formData.dispatch_status && editId) {
       missingFields.push("Status");
     }
     invoiceData.forEach((row, index) => {
-      if (!row.purchase_sub_godown_id)
+      if (!row.dispatch_sub_godown_id)
         missingFields.push(`Row ${index + 1}: Go Down`);
-      if (!row.purchase_sub_item_id)
+      if (!row.dispatch_sub_item_id)
         missingFields.push(`Row ${index + 1}: Item`);
 
       if (
-        row.purchase_sub_box === null ||
-        row.purchase_sub_box === undefined ||
-        row.purchase_sub_box === ""
+        row.dispatch_sub_box === null ||
+        row.dispatch_sub_box === undefined ||
+        row.dispatch_sub_box === ""
       ) {
         missingFields.push(`Row ${index + 1}: Box`);
       }
@@ -253,28 +276,29 @@ const CreatePurchase = () => {
     try {
       const payload = {
         ...formData,
-        purchase_product_data: invoiceData,
+        dispatch_product_data: invoiceData,
       };
 
       if (editId) {
         payload.item_status = formData.item_status;
       }
 
-      const response = await apiClient.post(
-        editId ? `${PURCHASE_EDIT_LIST}/${decryptedId}` : PURCHASE_CREATE,
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const url = editId
+        ? `${DISPATCH_EDIT_LIST}/${decryptedId}`
+        : DISPATCH_CREATE;
+      const method = editId ? "put" : "post";
 
+      const response = await apiClient[method](url, payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       if (response?.data.code == 200) {
         toast({
           title: "Success",
           description: response.data.msg,
         });
+        navigate("/dispatch");
       } else {
         toast({
           title: "Error",
@@ -286,14 +310,78 @@ const CreatePurchase = () => {
       console.log(error);
       toast({
         title: "Error",
-        description: error?.response?.data?.message || "Failed to save item",
+        description: error?.response?.data?.message || "Failed to save",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
   };
+  const handleDeleteRow = (productId) => {
+    setDeleteConfirmOpen(true);
+    setDeleteItemId(productId);
+  };
+  const handleDelete = async () => {
+    try {
+      const response = await apiClient.delete(
+        `${DISPATCH_SUB_DELETE}/${deleteItemId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
+      const data = response.data;
+
+      if (data.code === 200) {
+        toast({
+          title: "Success",
+          description: data.msg,
+        });
+
+        setInvoiceData((prevData) =>
+          prevData.filter((row) => row.id !== deleteItemId)
+        );
+      } else if (data.code === 400) {
+        toast({
+          title: "Duplicate Entry",
+          description: data.msg,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Unexpected Response",
+          description: data.msg || "Something unexpected happened.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error?.response?.data?.msg || error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setDeleteConfirmOpen(false);
+      setDeleteItemId(null);
+    }
+  };
+  if (
+    isFetching ||
+    loadingbuyer ||
+    loadingitem ||
+    loadinggodown ||
+    loadingref
+  ) {
+    return (
+      <Page>
+        <div className="flex justify-center items-center h-full">
+          <Loader />
+        </div>
+      </Page>
+    );
+  }
   return (
     <Page>
       <div className="p-0 md:p-4">
@@ -308,17 +396,19 @@ const CreatePurchase = () => {
               <div className="flex items-center px-4 py-5 relative z-10">
                 <button
                   type="button"
-                  onClick={() => navigate("/purchase")}
+                  onClick={() => navigate("/dispatch")}
                   className="p-1.5 bg-white/20 rounded-full text-white mr-3 shadow-sm hover:bg-white/30 transition-colors"
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </button>
                 <div className="flex flex-col">
                   <h1 className="text-lg font-bold tracking-wide">
-                    Create Purchase
+                    {editId ? "Update Dispatch" : "Create  Dispatch"}
                   </h1>
                   <p className="text-xs text-yellow-100 mt-0.5 opacity-90">
-                    Add new purchase details
+                    {editId
+                      ? "Update new dispatch details"
+                      : "Add new dispatch details"}
                   </p>
                 </div>
               </div>
@@ -335,8 +425,8 @@ const CreatePurchase = () => {
                   </label>
                   <Input
                     className="bg-white border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-yellow-300 focus:border-yellow-400"
-                    value={formData.purchase_date}
-                    onChange={(e) => handleInputChange(e, "purchase_date")}
+                    value={formData.dispatch_date}
+                    onChange={(e) => handleInputChange(e, "dispatch_date")}
                     type="date"
                   />
                 </div>
@@ -346,17 +436,19 @@ const CreatePurchase = () => {
                       <span className="w-1 h-4 bg-yellow-500 rounded-full mr-2"></span>
                       Buyer<span className="text-red-500">*</span>
                     </label>
-                    <button
-                      type="button"
-                      className="flex items-center text-xs text-yellow-600 font-medium bg-yellow-50 px-2 py-0.5 rounded-full"
-                    >
-                      <SquarePlus className="h-3 w-3 mr-1" />
-                      <BuyerForm />
-                    </button>
+                    {!editId && (
+                      <button
+                        type="button"
+                        className="flex items-center text-xs text-yellow-600 font-medium bg-yellow-50 px-2 py-0.5 rounded-full"
+                      >
+                        <SquarePlus className="h-3 w-3 mr-1" />
+                        <BuyerForm />
+                      </button>
+                    )}
                   </div>
                   <MemoizedSelect
-                    value={formData.purchase_buyer_id}
-                    onChange={(e) => handleInputChange(e, "purchase_buyer_id")}
+                    value={formData.dispatch_buyer_id}
+                    onChange={(e) => handleInputChange(e, "dispatch_buyer_id")}
                     options={
                       buyerData?.buyers?.map((buyer) => ({
                         value: buyer.id,
@@ -367,44 +459,77 @@ const CreatePurchase = () => {
                     className="bg-white focus:ring-2 focus:ring-yellow-300"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
+                {!editId && (
+                  <div className="mb-4">
+                    <div>
+                      <label className="sm:block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        <span className="w-1 h-4 bg-yellow-500 rounded-full mr-2"></span>
+                        Ref No<span className="text-red-500">*</span>
+                      </label>
+
+                      <MemoizedSelect
+                        value={formData.dispatch_ref_no}
+                        onChange={(e) =>
+                          handleInputChange(e, "dispatch_ref_no")
+                        }
+                        options={
+                          dispatchRef
+                            ? [
+                                {
+                                  value: dispatchRef.dispatch_ref,
+                                  label: dispatchRef.dispatch_ref,
+                                },
+                              ]
+                            : []
+                        }
+                        placeholder="Select Ref"
+                        className="bg-white focus:ring-2 focus:ring-yellow-300"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {editId && (
+                  <div className="mb-4">
                     <label className="sm:block text-sm font-medium text-gray-700 mb-1 flex items-center">
                       <span className="w-1 h-4 bg-yellow-500 rounded-full mr-2"></span>
-                      Ref No<span className="text-red-500">*</span>
-                    </label>
-
-                    <MemoizedSelect
-                      value={formData.purchase_ref_no}
-                      onChange={(e) => handleInputChange(e, "purchase_ref_no")}
-                      options={
-                        purchaseRef
-                          ? [
-                              {
-                                value: purchaseRef.purchase_ref,
-                                label: purchaseRef.purchase_ref,
-                              },
-                            ]
-                          : []
-                      }
-                      placeholder="Select Ref"
-                      className="bg-white focus:ring-2 focus:ring-yellow-300"
-                    />
-                  </div>
-                  <div>
-                    <label className="sm:block text-sm font-medium text-gray-700 mb-1 flex items-center">
-                      <span className="w-1 h-4 bg-gray-300 rounded-full mr-2"></span>
-                      Vehicle No
+                      Ref<span className="text-red-500">*</span>
                     </label>
                     <Input
                       className="bg-white border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-yellow-300 focus:border-yellow-400"
-                      value={formData.purchase_vehicle_no}
-                      onChange={(e) =>
-                        handleInputChange(e, "purchase_vehicle_no")
-                      }
-                      placeholder="Vehicle No"
+                      value={formData.dispatch_ref_no}
+                      onChange={(e) => handleInputChange(e, "dispatch_ref_no")}
+                      disabled
                     />
                   </div>
+                )}
+                <div className="mb-4">
+                  <label className="sm:block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                    <span className="w-1 h-4 bg-gray-300 rounded-full mr-2"></span>
+                    Vehicle No
+                  </label>
+                  <Input
+                    className="bg-white border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-yellow-300 focus:border-yellow-400"
+                    value={formData.dispatch_vehicle_no}
+                    onChange={(e) =>
+                      handleInputChange(e, "dispatch_vehicle_no")
+                    }
+                    placeholder="Vehicle No"
+                  />
+                </div>
+                <div>
+                  <label className="sm:block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                    <span className="w-1 h-4 bg-gray-300 rounded-full mr-2"></span>
+                    City
+                  </label>
+                  <Input
+                    className="bg-white border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-yellow-300 focus:border-yellow-400"
+                    value={formData.dispatch_buyer_city}
+                    onChange={(e) =>
+                      handleInputChange(e, "dispatch_buyer_city")
+                    }
+                    placeholder="City"
+                  />
                 </div>
               </div>
               <div>
@@ -414,8 +539,8 @@ const CreatePurchase = () => {
                 </label>
                 <Textarea
                   className="bg-white border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-yellow-300 focus:border-yellow-400"
-                  value={formData.purchase_remark}
-                  onChange={(e) => handleInputChange(e, "purchase_remark")}
+                  value={formData.dispatch_remark}
+                  onChange={(e) => handleInputChange(e, "dispatch_remark")}
                   placeholder="Add any notes here"
                   rows={2}
                 />
@@ -428,13 +553,15 @@ const CreatePurchase = () => {
                     <h2 className="text-base font-semibold text-gray-800">
                       Items
                     </h2>
-                    <button
-                      type="button"
-                      className="flex items-center text-xs text-yellow-600 font-medium bg-yellow-50 px-2 py-0.5 rounded-full"
-                    >
-                      <SquarePlus className="h-3 w-3 mr-1" />
-                      <CreateItem />
-                    </button>
+                    {!editId && (
+                      <button
+                        type="button"
+                        className="flex items-center text-xs text-yellow-600 font-medium bg-yellow-50 px-2 py-0.5 rounded-full"
+                      >
+                        <SquarePlus className="h-3 w-3 mr-1" />
+                        <CreateItem />
+                      </button>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -473,12 +600,12 @@ const CreatePurchase = () => {
                           <TableCell className="px-4 py-3 min-w-[200px] align-top">
                             <div className="space-y-1">
                               <MemoizedProductSelect
-                                value={row.purchase_sub_item_id}
+                                value={row.dispatch_sub_item_id}
                                 onChange={(e) =>
                                   handlePaymentChange(
                                     e,
                                     rowIndex,
-                                    "purchase_sub_item_id"
+                                    "dispatch_sub_item_id"
                                   )
                                 }
                                 options={
@@ -517,12 +644,12 @@ const CreatePurchase = () => {
                           {/* Godown Select */}
                           <TableCell className="px-4 py-3 min-w-[150px] align-top">
                             <MemoizedProductSelect
-                              value={row.purchase_sub_godown_id}
+                              value={row.dispatch_sub_godown_id}
                               onChange={(e) =>
                                 handlePaymentChange(
                                   e,
                                   rowIndex,
-                                  "purchase_sub_godown_id"
+                                  "dispatch_sub_godown_id"
                                 )
                               }
                               options={
@@ -544,12 +671,12 @@ const CreatePurchase = () => {
                                   (boxInputRefs.current[rowIndex] = el)
                                 }
                                 className="bg-white border border-gray-300 w-full text-xs"
-                                value={row.purchase_sub_box}
+                                value={row.dispatch_sub_box}
                                 onChange={(e) =>
                                   handlePaymentChange(
                                     e,
                                     rowIndex,
-                                    "purchase_sub_box"
+                                    "dispatch_sub_box"
                                   )
                                 }
                                 placeholder="Qty"
@@ -574,11 +701,11 @@ const CreatePurchase = () => {
                 <div className="mt-2 text-xs text-gray-500 flex items-center">
                   <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full mr-1"></span>
                   Total Items: {invoiceData.length}
-                  {invoiceData.some((row) => row.purchase_sub_box) && (
+                  {invoiceData.some((row) => row.dispatch_sub_box) && (
                     <div className="flex items-center text-sm text-gray-700">
                       <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full mr-2"></span>
                       Available Box:&nbsp;
-                      {invoiceData.find((row) => row.purchase_sub_box)
+                      {invoiceData.find((row) => row.dispatch_sub_box)
                         ?.avaiable_box || 0}
                     </div>
                   )}
@@ -593,12 +720,14 @@ const CreatePurchase = () => {
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    <div className="flex items-center justify-center">
-                      <span className="animate-spin mr-2">⟳</span>
-                      Processing...
-                    </div>
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {editId ? "Updating..." : "Creating..."}
+                    </>
+                  ) : editId ? (
+                    "Update Dispatch"
                   ) : (
-                    "CREATE PURCHASE"
+                    "Create Dispatch"
                   )}
                 </Button>
               </div>
@@ -608,7 +737,15 @@ const CreatePurchase = () => {
 
         <div className="hidden sm:block">
           <form onSubmit={handleSubmit} className="w-full ">
-            <BranchHeader />
+            <div
+              className={`flex sticky top-0 z-10 border border-gray-200 rounded-lg justify-between items-start gap-8 mb-2 ${ButtonConfig.cardheaderColor} p-4 shadow-sm`}
+            >
+              <div className="flex-1">
+                <h1 className="text-lg font-bold text-gray-800">
+                  {editId ? "Update Dispatch" : "Create New Dispatch"}
+                </h1>
+              </div>
+            </div>{" "}
             <Card className={`mb-6 ${ButtonConfig.cardColor}`}>
               <CardContent className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -621,8 +758,8 @@ const CreatePurchase = () => {
                       </label>
                       <Input
                         className="bg-white"
-                        value={formData.purchase_date}
-                        onChange={(e) => handleInputChange(e, "purchase_date")}
+                        value={formData.dispatch_date}
+                        onChange={(e) => handleInputChange(e, "dispatch_date")}
                         placeholder="Enter Payment Date"
                         type="date"
                       />
@@ -635,20 +772,22 @@ const CreatePurchase = () => {
                       >
                         Buyer <span className="text-red-500">*</span>
                       </label>
-                      <button
-                        type="button"
-                        className="flex items-center text-xs font-medium text-yellow-700 bg-yellow-100 hover:bg-yellow-200 px-2 py-1 rounded-full transition-colors duration-150"
-                      >
-                        <SquarePlus className="h-3 w-3 mr-1" />
+                      {!editId && (
+                        <button
+                          type="button"
+                          className="flex items-center text-xs font-medium text-yellow-700 bg-yellow-100 hover:bg-yellow-200 px-2 py-1 rounded-full transition-colors duration-150"
+                        >
+                          <SquarePlus className="h-3 w-3 mr-1" />
 
-                        <BuyerForm />
-                      </button>
+                          <BuyerForm />
+                        </button>
+                      )}
                     </div>
 
                     <MemoizedSelect
-                      value={formData.purchase_buyer_id}
+                      value={formData.dispatch_buyer_id}
                       onChange={(e) =>
-                        handleInputChange(e, "purchase_buyer_id")
+                        handleInputChange(e, "dispatch_buyer_id")
                       }
                       options={
                         buyerData?.buyers?.map((buyer) => ({
@@ -660,35 +799,53 @@ const CreatePurchase = () => {
                       className="bg-white focus:ring-2 focus:ring-yellow-300"
                     />
                   </div>
+                  {!editId && (
+                    <div>
+                      <div>
+                        <label
+                          className={`block  ${ButtonConfig.cardLabel} text-sm mb-2 font-medium `}
+                        >
+                          Ref No<span className="text-red-500">*</span>
+                        </label>
 
-                  <div>
+                        <MemoizedSelect
+                          value={formData.dispatch_ref_no}
+                          onChange={(e) =>
+                            handleInputChange(e, "dispatch_ref_no")
+                          }
+                          options={
+                            dispatchRef
+                              ? [
+                                  {
+                                    value: dispatchRef.dispatch_ref,
+                                    label: dispatchRef.dispatch_ref,
+                                  },
+                                ]
+                              : []
+                          }
+                          placeholder="Select Ref"
+                          className="bg-white focus:ring-2 focus:ring-yellow-300"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {editId && (
                     <div>
                       <label
                         className={`block  ${ButtonConfig.cardLabel} text-sm mb-2 font-medium `}
                       >
-                        Ref No<span className="text-red-500">*</span>
+                        Ref No <span className="text-red-500">*</span>
                       </label>
-
-                      <MemoizedSelect
-                        value={formData.purchase_ref_no}
+                      <Input
+                        className="bg-white border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-yellow-300 focus:border-yellow-400"
+                        value={formData.dispatch_ref_no}
                         onChange={(e) =>
-                          handleInputChange(e, "purchase_ref_no")
+                          handleInputChange(e, "dispatch_ref_no")
                         }
-                        options={
-                          purchaseRef
-                            ? [
-                                {
-                                  value: purchaseRef.purchase_ref,
-                                  label: purchaseRef.purchase_ref,
-                                },
-                              ]
-                            : []
-                        }
-                        placeholder="Select Ref"
-                        className="bg-white focus:ring-2 focus:ring-yellow-300"
+                        disabled
                       />
                     </div>
-                  </div>
+                  )}
                   <div>
                     <div>
                       <label
@@ -698,11 +855,28 @@ const CreatePurchase = () => {
                       </label>
                       <Input
                         className="bg-white"
-                        value={formData.purchase_vehicle_no}
+                        value={formData.dispatch_vehicle_no}
                         onChange={(e) =>
-                          handleInputChange(e, "purchase_vehicle_no")
+                          handleInputChange(e, "dispatch_vehicle_no")
                         }
                         placeholder="Enter Vehicle No"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div>
+                      <label
+                        className={`block  ${ButtonConfig.cardLabel} text-sm mb-2 font-medium `}
+                      >
+                        City
+                      </label>
+                      <Input
+                        className="bg-white border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-yellow-300 focus:border-yellow-400"
+                        value={formData.dispatch_buyer_city}
+                        onChange={(e) =>
+                          handleInputChange(e, "dispatch_buyer_city")
+                        }
+                        placeholder="City"
                       />
                     </div>
                   </div>
@@ -716,8 +890,8 @@ const CreatePurchase = () => {
                     </label>
                     <Textarea
                       className="bg-white"
-                      value={formData.purchase_remark}
-                      onChange={(e) => handleInputChange(e, "purchase_remark")}
+                      value={formData.dispatch_remark}
+                      onChange={(e) => handleInputChange(e, "dispatch_remark")}
                       placeholder="Enter Remark"
                     />
                   </div>
@@ -734,10 +908,12 @@ const CreatePurchase = () => {
                                 *
                               </span>
                             </span>
-                            <div className="flex items-center gap-1">
-                              <SquarePlus className="h-4 w-4 text-red-600" />
-                              <CreateItem />
-                            </div>
+                            {!editId && (
+                              <div className="flex items-center gap-1">
+                                <SquarePlus className="h-4 w-4 text-red-600" />
+                                <CreateItem />
+                              </div>
+                            )}
                           </div>
                         </TableHead>
 
@@ -773,12 +949,12 @@ const CreatePurchase = () => {
                           <TableCell className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-1">
                               <MemoizedProductSelect
-                                value={row.purchase_sub_item_id}
+                                value={row.dispatch_sub_item_id}
                                 onChange={(e) =>
                                   handlePaymentChange(
                                     e,
                                     rowIndex,
-                                    "purchase_sub_item_id"
+                                    "dispatch_sub_item_id"
                                   )
                                 }
                                 options={
@@ -801,12 +977,12 @@ const CreatePurchase = () => {
                           <TableCell className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-1">
                               <MemoizedProductSelect
-                                value={row.purchase_sub_godown_id}
+                                value={row.dispatch_sub_godown_id}
                                 onChange={(e) =>
                                   handlePaymentChange(
                                     e,
                                     rowIndex,
-                                    "purchase_sub_godown_id"
+                                    "dispatch_sub_godown_id"
                                   )
                                 }
                                 options={
@@ -830,18 +1006,18 @@ const CreatePurchase = () => {
                             <div className="flex flex-col gap-1">
                               <Input
                                 className="bg-white border border-gray-300 text-sm"
-                                value={row.purchase_sub_box}
+                                value={row.dispatch_sub_box}
                                 onChange={(e) =>
                                   handlePaymentChange(
                                     e,
                                     rowIndex,
-                                    "purchase_sub_box"
+                                    "dispatch_sub_box"
                                   )
                                 }
                                 placeholder="Enter Box"
                                 type="number"
                               />
-                              {row.purchase_sub_box && (
+                              {row.dispatch_sub_box && (
                                 <div className="text-xs text-gray-700">
                                   • Available Box: {row.avaiable_box}
                                 </div>
@@ -851,15 +1027,27 @@ const CreatePurchase = () => {
 
                           {/* Delete Button */}
                           <TableCell className="p-2 align-middle">
-                            <Button
-                              variant="ghost"
-                              onClick={() => removeRow(rowIndex)}
-                              disabled={invoiceData.length === 1}
-                              className="text-red-500"
-                              type="button"
-                            >
-                              <MinusCircle className="h-4 w-4" />
-                            </Button>
+                            {row.id ? (
+                              userType == 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRow(row.id)}
+                                  className={`rounded-full  bg-red-200 text-red-500 items-center`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                onClick={() => removeRow(rowIndex)}
+                                disabled={invoiceData.length === 1}
+                                className="text-red-500"
+                                type="button"
+                              >
+                                <MinusCircle className="h-4 w-4" />
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -868,19 +1056,28 @@ const CreatePurchase = () => {
                 </div>
               </CardContent>
             </Card>
-
             <div className="flex flex-row items-center gap-2 justify-end ">
               <Button
                 type="submit"
                 className={`${ButtonConfig.backgroundColor} ${ButtonConfig.hoverBackgroundColor} ${ButtonConfig.textColor} flex items-center mt-2`}
                 disabled={isLoading}
               >
-                {isLoading ? "Submitting..." : "Create Purchase"}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {editId ? "Updating..." : "Creating..."}
+                  </>
+                ) : editId ? (
+                  "Update Dispatch"
+                ) : (
+                  "Create Dispatch"
+                )}{" "}
               </Button>
+
               <Button
                 type="button"
                 onClick={() => {
-                  navigate("/purchase");
+                  navigate("/dispatch");
                 }}
                 className={`${ButtonConfig.backgroundColor} ${ButtonConfig.hoverBackgroundColor} ${ButtonConfig.textColor} flex items-center mt-2`}
               >
@@ -890,8 +1087,28 @@ const CreatePurchase = () => {
           </form>
         </div>
       </div>
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              dispatch.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className={`${ButtonConfig.backgroundColor}  ${ButtonConfig.textColor} text-black hover:bg-red-600`}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Page>
   );
 };
 
-export default CreatePurchase;
+export default CreateDispatch;

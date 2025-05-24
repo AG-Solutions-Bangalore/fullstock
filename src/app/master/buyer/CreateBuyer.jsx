@@ -196,9 +196,12 @@ const BuyerForm = ({ buyerId = null }) => {
       );
     }
     if (
-      ["/purchase/create", "/dispatch/create", "/purchase/edit"].includes(
-        pathname
-      )
+      [
+        "/purchase/create",
+        "/purchase/edit/:id",
+        "/dispatch/create",
+        "/purchase/edit",
+      ].includes(pathname)
     ) {
       return (
         <div className="flex items-center space-x-2 text-yellow-600 cursor-pointer group">

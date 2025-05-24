@@ -23,6 +23,7 @@ export function AppBottombar() {
       url: "/home",
       icon: Home,
     },
+
     ...(id != 1
       ? [
           {
@@ -66,36 +67,18 @@ export function AppBottombar() {
           },
         ]
       : []),
+
     {
       title: "Purchase",
-      url: "#",
+      url: "/purchase",
       icon: ShoppingBag,
-      items: [
-        {
-          title: "Purchase",
-          url: "/purchase",
-        },
-        {
-          title: "Purchase Return",
-          url: "/purchase-return",
-        },
-      ],
     },
     {
       title: "Dispatch",
-      url: "#",
+      url: "/dispatch",
       icon: ShoppingBag,
-      items: [
-        {
-          title: "Dispatch",
-          url: "/dispatch",
-        },
-        {
-          title: "Dispatch Return",
-          url: "/dispatch-return",
-        },
-      ],
     },
+
     {
       title: "Report",
       url: "#",

@@ -1,14 +1,4 @@
 import Page from "@/app/dashboard/page";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -35,8 +25,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import axios from "axios";
-import { ChevronDown, Edit, Search, SquarePlus, Trash2 } from "lucide-react";
+import { ChevronDown, Edit, Search, SquarePlus } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -45,6 +34,8 @@ import {
   navigateToPurchaseEdit,
   PURCHASE_LIST,
 } from "@/api";
+import apiClient from "@/api/axios";
+import usetoken from "@/api/usetoken";
 import { encryptId } from "@/components/common/Encryption";
 import Loader from "@/components/loader/Loader";
 import StatusToggle from "@/components/toggle/StatusToggle";
@@ -54,13 +45,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import BASE_URL from "@/config/BaseUrl";
 import { ButtonConfig } from "@/config/ButtonConfig";
-import { useToast } from "@/hooks/use-toast";
 import moment from "moment";
 import { RiWhatsappFill } from "react-icons/ri";
-import usetoken from "@/api/usetoken";
-import apiClient from "@/api/axios";
 
 const PurchaseList = () => {
   const token = usetoken();
@@ -81,70 +68,16 @@ const PurchaseList = () => {
   });
 
   // State for table management
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteItemId, setDeleteItemId] = useState(null);
+
   const [sorting, setSorting] = useState([]);
   const [columnFilters, setColumnFilters] = useState([]);
   const [columnVisibility, setColumnVisibility] = useState({});
   const [rowSelection, setRowSelection] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
-  const { toast } = useToast();
   const UserId = localStorage.getItem("userType");
   const queryClient = useQueryClient();
   const whatsapp = localStorage.getItem("whatsapp-number");
   const navigate = useNavigate();
-  const handleDeleteRow = (productId) => {
-    setDeleteItemId(productId);
-    setDeleteConfirmOpen(true);
-  };
-  const confirmDelete = async () => {
-    try {
-
-      const response = await apiClient.delete(
-        `${BASE_URL}/api/purchases/${deleteItemId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const data = response.data;
-
-      if (data.code === 200) {
-        toast({
-          title: "Success",
-          description: data.msg,
-        });
-        refetch();
-      } else if (data.code === 400) {
-        toast({
-          title: "Duplicate Entry",
-          description: data.msg,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: data.msg || "Something went wrong.",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Unexpected Error",
-        description:
-          error?.response?.data?.msg ||
-          error.message ||
-          "Something unexpected happened.",
-        variant: "destructive",
-      });
-      console.error("Failed to delete product:", error);
-    } finally {
-      setDeleteConfirmOpen(false);
-      setDeleteItemId(null);
-    }
-  };
 
   const handleFetchPurchaseById = async (purchaseId) => {
     try {
@@ -288,25 +221,6 @@ ${itemLines.map((line) => "  " + line).join("\n")}
               </TooltipProvider>
             )}
 
-            {UserId != 1 && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      onClick={() => handleDeleteRow(purchaseId)}
-                      className="text-red-500"
-                      type="button"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Delete Purchase</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -472,17 +386,6 @@ ${itemLines.map((line) => "  " + line).join("\n")}
                             }}
                           >
                             <Edit className="w-4 h-4" />
-                          </button>
-                        )}
-                        {UserId != 1 && (
-                          <button
-                            variant="ghost"
-                            onClick={() => {
-                              e.stopPropagation();
-                              handleDeleteRow(item.id);
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4 text-red-500" />
                           </button>
                         )}
                         <button
@@ -760,26 +663,6 @@ ${itemLines.map((line) => "  " + line).join("\n")}
           </div>
         </div>
       </div>
-      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              purchase.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className={`${ButtonConfig.backgroundColor}  ${ButtonConfig.textColor} text-black hover:bg-red-600`}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </Page>
   );
 };

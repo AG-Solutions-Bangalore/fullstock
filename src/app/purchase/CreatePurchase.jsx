@@ -1,3 +1,11 @@
+import {
+  fetchPurchaseById,
+  PURCHASE_CREATE,
+  PURCHASE_EDIT_LIST,
+  PURCHASE_SUB_DELETE,
+} from "@/api";
+import apiClient from "@/api/axios";
+import usetoken from "@/api/usetoken";
 import Page from "@/app/dashboard/page";
 import { MemoizedProductSelect } from "@/components/common/MemoizedProductSelect";
 import { MemoizedSelect } from "@/components/common/MemoizedSelect";
@@ -21,39 +29,47 @@ import {
   useFetchItems,
   useFetchPurchaseRef,
 } from "@/hooks/useApi";
-import { ArrowLeft, MinusCircle, PlusCircle, SquarePlus } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  MinusCircle,
+  PlusCircle,
+  SquarePlus,
+  Trash2,
+} from "lucide-react";
 import moment from "moment";
-import { useCallback, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import BuyerForm from "../master/buyer/CreateBuyer";
 import CreateItem from "../master/item/CreateItem";
-import apiClient from "@/api/axios";
+import { useQuery } from "@tanstack/react-query";
+import { decryptId } from "@/components/common/Encryption";
+import Loader from "@/components/loader/Loader";
 import {
-  ITEM_CREATE,
-  ITEM_EDIT_SUMBIT,
-  PURCHASE_CREATE,
-  PURCHASE_EDIT_LIST,
-} from "@/api";
-import usetoken from "@/api/usetoken";
-// Validation Schema
-const BranchHeader = () => {
-  return (
-    <div
-      className={`flex sticky top-0 z-10 border border-gray-200 rounded-lg justify-between items-start gap-8 mb-2 ${ButtonConfig.cardheaderColor} p-4 shadow-sm`}
-    >
-      <div className="flex-1">
-        <h1 className="text-lg font-bold text-gray-800">Create Purchase</h1>
-      </div>
-    </div>
-  );
-};
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useSelector } from "react-redux";
+const CreatePurchase = () => {
+  const { id } = useParams();
+  const decryptedId = decryptId(id);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteItemId, setDeleteItemId] = useState(null);
 
-const CreatePurchase = ({ editId = null }) => {
+  const userType = useSelector((state) => state.auth.user_type);
+  const editId = Boolean(id);
   const { toast } = useToast();
   const navigate = useNavigate();
   const boxInputRefs = useRef([]);
   const today = moment().format("YYYY-MM-DD");
   const [isLoading, setIsLoading] = useState(false);
+
   const token = usetoken();
 
   const [formData, setFormData] = useState({
@@ -67,6 +83,7 @@ const CreatePurchase = ({ editId = null }) => {
 
   const [invoiceData, setInvoiceData] = useState([
     {
+      id: editId ? "" : null,
       purchase_sub_item_id: "",
       purchase_sub_godown_id: "",
       purchase_sub_box: "",
@@ -98,11 +115,63 @@ const CreatePurchase = ({ editId = null }) => {
       boxInputRefs.current[rowIndex].focus();
     }
   };
+  const {
+    data: purchaseByid,
+    isFetching,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ["purchaseByid", id],
+    queryFn: () => fetchPurchaseById(id, token),
+    enabled: !!id,
+  });
+  useEffect(() => {
+    if (editId && purchaseByid?.purchase) {
+      console.log(purchaseByid.purchase.purchase_ref_no);
+      setFormData({
+        purchase_date: purchaseByid.purchase.purchase_date || "",
+        purchase_buyer_name: purchaseByid.buyer.buyer_name || "",
+        purchase_buyer_id: purchaseByid.purchase.purchase_buyer_id || "",
+        purchase_buyer_city: purchaseByid.buyer.buyer_city || "",
+        purchase_ref_no: purchaseByid.purchase.purchase_ref_no || "",
+        purchase_vehicle_no: purchaseByid.purchase.purchase_vehicle_no || "",
+        purchase_remark: purchaseByid.purchase.purchase_remark || "",
+        purchase_status: purchaseByid.purchase.purchase_status || "",
+      });
 
-  const { data: buyerData } = useFetchBuyers();
-  const { data: itemsData } = useFetchItems();
-  const { data: godownData } = useFetchGoDown();
-  const { data: purchaseRef } = useFetchPurchaseRef();
+      // Set invoice line items
+      const mappedData = Array.isArray(purchaseByid.purchaseSub)
+        ? purchaseByid.purchaseSub.map((sub) => ({
+            id: sub.id || "",
+            purchase_sub_item_id: sub.purchase_sub_item_id || "",
+            purchase_sub_box: sub.purchase_sub_box || "",
+            item_brand: sub.item_brand || "",
+            item_size: sub.item_size || "",
+            purchase_sub_item: sub.item_name || "",
+            purchase_sub_weight: sub.item_weight || "",
+            purchase_sub_godown_id: sub.purchase_sub_godown_id,
+          }))
+        : [
+            {
+              purchase_sub_item_id: "",
+              purchase_sub_box: "",
+              item_brand: "",
+              item_size: "",
+              purchase_sub_item: "",
+              purchase_sub_weight: "",
+              purchase_sub_godown_id: "",
+              avaiable_box: "",
+            },
+          ];
+
+      setInvoiceData(mappedData);
+    }
+  }, [editId, purchaseByid]);
+
+  const { data: buyerData, isLoading: loadingbuyer } = useFetchBuyers();
+  const { data: itemsData, isLoading: loadingitem } = useFetchItems();
+  const { data: godownData, isLoading: loadinggodown } = useFetchGoDown();
+  const { data: purchaseRef, isLoading: loadingref } = useFetchPurchaseRef();
 
   const handlePaymentChange = (selectedValue, rowIndex, fieldName) => {
     let value;
@@ -116,9 +185,7 @@ const CreatePurchase = ({ editId = null }) => {
 
     if (fieldName == "purchase_sub_item_id") {
       updatedData[rowIndex][fieldName] = value;
-      const selectedItem = itemsData?.items?.find(
-        (item) => item.id == value
-      );
+      const selectedItem = itemsData?.items?.find((item) => item.id == value);
       console.log(selectedItem, "selectedItem");
       if (selectedItem) {
         updatedData[rowIndex]["item_size"] = selectedItem.item_size;
@@ -208,21 +275,22 @@ const CreatePurchase = ({ editId = null }) => {
         payload.item_status = formData.item_status;
       }
 
-      const response = await apiClient.post(
-        editId ? `${PURCHASE_EDIT_LIST}/${editId}` : PURCHASE_CREATE,
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const url = editId
+        ? `${PURCHASE_EDIT_LIST}/${decryptedId}`
+        : PURCHASE_CREATE;
+      const method = editId ? "put" : "post";
 
+      const response = await apiClient[method](url, payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       if (response?.data.code == 200) {
         toast({
           title: "Success",
           description: response.data.msg,
         });
+        navigate("/purchase");
       } else {
         toast({
           title: "Error",
@@ -241,7 +309,71 @@ const CreatePurchase = ({ editId = null }) => {
       setIsLoading(false);
     }
   };
+  const handleDeleteRow = (productId) => {
+    setDeleteConfirmOpen(true);
+    setDeleteItemId(productId);
+  };
+  const handleDelete = async () => {
+    try {
+      const response = await apiClient.delete(
+        `${PURCHASE_SUB_DELETE}/${deleteItemId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
+      const data = response.data;
+
+      if (data.code === 200) {
+        toast({
+          title: "Success",
+          description: data.msg,
+        });
+
+        setInvoiceData((prevData) =>
+          prevData.filter((row) => row.id !== deleteItemId)
+        );
+      } else if (data.code === 400) {
+        toast({
+          title: "Duplicate Entry",
+          description: data.msg,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Unexpected Response",
+          description: data.msg || "Something unexpected happened.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error?.response?.data?.msg || error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setDeleteConfirmOpen(false);
+      setDeleteItemId(null);
+    }
+  };
+  if (
+    isFetching ||
+    loadingbuyer ||
+    loadingitem ||
+    loadinggodown ||
+    loadingref
+  ) {
+    return (
+      <Page>
+        <div className="flex justify-center items-center h-full">
+          <Loader />
+        </div>
+      </Page>
+    );
+  }
   return (
     <Page>
       <div className="p-0 md:p-4">
@@ -263,10 +395,12 @@ const CreatePurchase = ({ editId = null }) => {
                 </button>
                 <div className="flex flex-col">
                   <h1 className="text-lg font-bold tracking-wide">
-                    Create Purchase
+                    {editId ? "Update Purchase" : "Create  Purchase"}
                   </h1>
                   <p className="text-xs text-yellow-100 mt-0.5 opacity-90">
-                    Add new purchase details
+                    {editId
+                      ? "Update new purchase details"
+                      : "Add new purchase details"}
                   </p>
                 </div>
               </div>
@@ -294,13 +428,15 @@ const CreatePurchase = ({ editId = null }) => {
                       <span className="w-1 h-4 bg-yellow-500 rounded-full mr-2"></span>
                       Buyer<span className="text-red-500">*</span>
                     </label>
-                    <button
-                      type="button"
-                      className="flex items-center text-xs text-yellow-600 font-medium bg-yellow-50 px-2 py-0.5 rounded-full"
-                    >
-                      <SquarePlus className="h-3 w-3 mr-1" />
-                      <BuyerForm />
-                    </button>
+                    {!editId && (
+                      <button
+                        type="button"
+                        className="flex items-center text-xs text-yellow-600 font-medium bg-yellow-50 px-2 py-0.5 rounded-full"
+                      >
+                        <SquarePlus className="h-3 w-3 mr-1" />
+                        <BuyerForm />
+                      </button>
+                    )}
                   </div>
                   <MemoizedSelect
                     value={formData.purchase_buyer_id}
@@ -315,61 +451,78 @@ const CreatePurchase = ({ editId = null }) => {
                     className="bg-white focus:ring-2 focus:ring-yellow-300"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                {!editId && (
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="sm:block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                        <span className="w-1 h-4 bg-yellow-500 rounded-full mr-2"></span>
+                        Ref No<span className="text-red-500">*</span>
+                      </label>
+
+                      <MemoizedSelect
+                        value={formData.purchase_ref_no}
+                        onChange={(e) =>
+                          handleInputChange(e, "purchase_ref_no")
+                        }
+                        options={
+                          purchaseRef
+                            ? [
+                                {
+                                  value: purchaseRef.purchase_ref,
+                                  label: purchaseRef.purchase_ref,
+                                },
+                              ]
+                            : []
+                        }
+                        placeholder="Select Ref"
+                        className="bg-white focus:ring-2 focus:ring-yellow-300"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {editId && (
                   <div>
                     <label className="sm:block text-sm font-medium text-gray-700 mb-1 flex items-center">
                       <span className="w-1 h-4 bg-yellow-500 rounded-full mr-2"></span>
-                      Ref No<span className="text-red-500">*</span>
-                    </label>
-
-                    <MemoizedSelect
-                      value={formData.purchase_ref_no}
-                      onChange={(e) => handleInputChange(e, "purchase_ref_no")}
-                      options={
-                        purchaseRef
-                          ? [
-                              {
-                                value: purchaseRef.purchase_ref,
-                                label: purchaseRef.purchase_ref,
-                              },
-                            ]
-                          : []
-                      }
-                      placeholder="Select Ref"
-                      className="bg-white focus:ring-2 focus:ring-yellow-300"
-                    />
-                  </div>
-                  <div>
-                    <label className="sm:block text-sm font-medium text-gray-700 mb-1 flex items-center">
-                      <span className="w-1 h-4 bg-gray-300 rounded-full mr-2"></span>
-                      Vehicle No
+                      Ref<span className="text-red-500">*</span>
                     </label>
                     <Input
                       className="bg-white border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-yellow-300 focus:border-yellow-400"
-                      value={formData.purchase_vehicle_no}
-                      onChange={(e) =>
-                        handleInputChange(e, "purchase_vehicle_no")
-                      }
-                      placeholder="Vehicle No"
+                      value={formData.purchase_ref_no}
+                      onChange={(e) => handleInputChange(e, "purchase_ref_no")}
+                      disabled
                     />
                   </div>
-                </div>
-
+                )}
                 <div>
                   <label className="sm:block text-sm font-medium text-gray-700 mb-1 flex items-center">
                     <span className="w-1 h-4 bg-gray-300 rounded-full mr-2"></span>
-                    Remark
+                    Vehicle No
                   </label>
-                  <Textarea
+                  <Input
                     className="bg-white border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-yellow-300 focus:border-yellow-400"
-                    value={formData.purchase_remark}
-                    onChange={(e) => handleInputChange(e, "purchase_remark")}
-                    placeholder="Add any notes here"
-                    rows={2}
+                    value={formData.purchase_vehicle_no}
+                    onChange={(e) =>
+                      handleInputChange(e, "purchase_vehicle_no")
+                    }
+                    placeholder="Vehicle No"
                   />
                 </div>
               </div>
-
+              <div>
+                <label className="sm:block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                  <span className="w-1 h-4 bg-gray-300 rounded-full mr-2"></span>
+                  Remark
+                </label>
+                <Textarea
+                  className="bg-white border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-yellow-300 focus:border-yellow-400"
+                  value={formData.purchase_remark}
+                  onChange={(e) => handleInputChange(e, "purchase_remark")}
+                  placeholder="Add any notes here"
+                  rows={2}
+                />
+              </div>
               {/* Items Section  Table */}
               <div className="bg-white rounded-xl shadow-sm p-2 mb-4 border border-yellow-100">
                 <div className="flex items-center justify-between mb-4">
@@ -378,13 +531,15 @@ const CreatePurchase = ({ editId = null }) => {
                     <h2 className="text-base font-semibold text-gray-800">
                       Items
                     </h2>
-                    <button
-                      type="button"
-                      className="flex items-center text-xs text-yellow-600 font-medium bg-yellow-50 px-2 py-0.5 rounded-full"
-                    >
-                      <SquarePlus className="h-3 w-3 mr-1" />
-                      <CreateItem />
-                    </button>
+                    {!editId && (
+                      <button
+                        type="button"
+                        className="flex items-center text-xs text-yellow-600 font-medium bg-yellow-50 px-2 py-0.5 rounded-full"
+                      >
+                        <SquarePlus className="h-3 w-3 mr-1" />
+                        <CreateItem />
+                      </button>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -536,34 +691,42 @@ const CreatePurchase = ({ editId = null }) => {
               </div>
 
               {/* Submit Button */}
-              {/* <div className="mb-20">
+              <div className="mb-20">
                 <Button
                   type="submit"
                   className="w-full bg-gradient-to-r from-yellow-600 to-yellow-400 hover:from-yellow-700 hover:to-yellow-500 text-white font-bold py-3.5 rounded-xl shadow-md transition-all transform hover:scale-[0.99]"
-                  disabled={createBranchMutation.isPending}
+                  disabled={isLoading}
                 >
-                  {createBranchMutation.isPending ? (
-                    <div className="flex items-center justify-center">
-                      <span className="animate-spin mr-2">⟳</span>
-                      Processing...
-                    </div>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {editId ? "Updating..." : "Creating..."}
+                    </>
+                  ) : editId ? (
+                    "Update Purchase"
                   ) : (
-                    "CREATE PURCHASE"
+                    "Create Purchase"
                   )}
                 </Button>
-              </div> */}
-
-              <div className="h-4"></div>
+              </div>
             </div>
           </form>
         </div>
 
         <div className="hidden sm:block">
           <form onSubmit={handleSubmit} className="w-full ">
-            <BranchHeader />
+            <div
+              className={`flex sticky top-0 z-10 border border-gray-200 rounded-lg justify-between items-start gap-8 mb-2 ${ButtonConfig.cardheaderColor} p-4 shadow-sm`}
+            >
+              <div className="flex-1">
+                <h1 className="text-lg font-bold text-gray-800">
+                  {editId ? "Update Purchase" : "Create New Purchase"}
+                </h1>
+              </div>
+            </div>{" "}
             <Card className={`mb-6 ${ButtonConfig.cardColor}`}>
               <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
                   <div>
                     <div>
                       <label
@@ -587,14 +750,16 @@ const CreatePurchase = ({ editId = null }) => {
                       >
                         Buyer <span className="text-red-500">*</span>
                       </label>
-                      <button
-                        type="button"
-                        className="flex items-center text-xs font-medium text-yellow-700 bg-yellow-100 hover:bg-yellow-200 px-2 py-1 rounded-full transition-colors duration-150"
-                      >
-                        <SquarePlus className="h-3 w-3 mr-1" />
+                      {!editId && (
+                        <button
+                          type="button"
+                          className="flex items-center text-xs font-medium text-yellow-700 bg-yellow-100 hover:bg-yellow-200 px-2 py-1 rounded-full transition-colors duration-150"
+                        >
+                          <SquarePlus className="h-3 w-3 mr-1" />
 
-                        <BuyerForm />
-                      </button>
+                          <BuyerForm />
+                        </button>
+                      )}
                     </div>
 
                     <MemoizedSelect
@@ -612,35 +777,53 @@ const CreatePurchase = ({ editId = null }) => {
                       className="bg-white focus:ring-2 focus:ring-yellow-300"
                     />
                   </div>
+                  {!editId && (
+                    <div>
+                      <div>
+                        <label
+                          className={`block  ${ButtonConfig.cardLabel} text-sm mb-2 font-medium `}
+                        >
+                          Ref No<span className="text-red-500">*</span>
+                        </label>
 
-                  <div>
+                        <MemoizedSelect
+                          value={formData.purchase_ref_no}
+                          onChange={(e) =>
+                            handleInputChange(e, "purchase_ref_no")
+                          }
+                          options={
+                            purchaseRef
+                              ? [
+                                  {
+                                    value: purchaseRef.purchase_ref,
+                                    label: purchaseRef.purchase_ref,
+                                  },
+                                ]
+                              : []
+                          }
+                          placeholder="Select Ref"
+                          className="bg-white focus:ring-2 focus:ring-yellow-300"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {editId && (
                     <div>
                       <label
                         className={`block  ${ButtonConfig.cardLabel} text-sm mb-2 font-medium `}
                       >
                         Ref No<span className="text-red-500">*</span>
                       </label>
-
-                      <MemoizedSelect
+                      <Input
+                        className="bg-white border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-yellow-300 focus:border-yellow-400"
                         value={formData.purchase_ref_no}
                         onChange={(e) =>
                           handleInputChange(e, "purchase_ref_no")
                         }
-                        options={
-                          purchaseRef
-                            ? [
-                                {
-                                  value: purchaseRef.purchase_ref,
-                                  label: purchaseRef.purchase_ref,
-                                },
-                              ]
-                            : []
-                        }
-                        placeholder="Select Ref"
-                        className="bg-white focus:ring-2 focus:ring-yellow-300"
+                        disabled
                       />
                     </div>
-                  </div>
+                  )}
                   <div>
                     <div>
                       <label
@@ -658,25 +841,22 @@ const CreatePurchase = ({ editId = null }) => {
                       />
                     </div>
                   </div>
-                  <div className="md:col-span-3">
-                    <div>
-                      <label
-                        className={`block  ${ButtonConfig.cardLabel} text-sm mb-2 font-medium `}
-                      >
-                        Remark
-                      </label>
-                      <Textarea
-                        className="bg-white"
-                        value={formData.purchase_remark}
-                        onChange={(e) =>
-                          handleInputChange(e, "purchase_remark")
-                        }
-                        placeholder="Enter Remark"
-                      />
-                    </div>
+                </div>
+                <div>
+                  <div>
+                    <label
+                      className={`block  ${ButtonConfig.cardLabel} text-sm mb-2 font-medium `}
+                    >
+                      Remark
+                    </label>
+                    <Textarea
+                      className="bg-white"
+                      value={formData.purchase_remark}
+                      onChange={(e) => handleInputChange(e, "purchase_remark")}
+                      placeholder="Enter Remark"
+                    />
                   </div>
                 </div>
-
                 <div className="mt-4 grid grid-cols-1">
                   <Table className="border border-gray-300 rounded-lg shadow-sm">
                     <TableHeader>
@@ -689,10 +869,12 @@ const CreatePurchase = ({ editId = null }) => {
                                 *
                               </span>
                             </span>
-                            <div className="flex items-center gap-1">
-                              <SquarePlus className="h-4 w-4 text-red-600" />
-                              <CreateItem />
-                            </div>
+                            {!editId && (
+                              <div className="flex items-center gap-1">
+                                <SquarePlus className="h-4 w-4 text-red-600" />
+                                <CreateItem />
+                              </div>
+                            )}
                           </div>
                         </TableHead>
 
@@ -806,15 +988,27 @@ const CreatePurchase = ({ editId = null }) => {
 
                           {/* Delete Button */}
                           <TableCell className="p-2 align-middle">
-                            <Button
-                              variant="ghost"
-                              onClick={() => removeRow(rowIndex)}
-                              disabled={invoiceData.length === 1}
-                              className="text-red-500"
-                              type="button"
-                            >
-                              <MinusCircle className="h-4 w-4" />
-                            </Button>
+                            {row.id ? (
+                              userType == 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRow(row.id)}
+                                  className={`rounded-full  bg-red-200 text-red-500 items-center`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                onClick={() => removeRow(rowIndex)}
+                                disabled={invoiceData.length === 1}
+                                className="text-red-500"
+                                type="button"
+                              >
+                                <MinusCircle className="h-4 w-4" />
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -823,15 +1017,24 @@ const CreatePurchase = ({ editId = null }) => {
                 </div>
               </CardContent>
             </Card>
-
             <div className="flex flex-row items-center gap-2 justify-end ">
               <Button
                 type="submit"
                 className={`${ButtonConfig.backgroundColor} ${ButtonConfig.hoverBackgroundColor} ${ButtonConfig.textColor} flex items-center mt-2`}
-                // disabled={createBranchMutation.isPending}
+                disabled={isLoading}
               >
-                {isLoading ? "Submitting..." : "Create Purchase"}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {editId ? "Updating..." : "Creating..."}
+                  </>
+                ) : editId ? (
+                  "Update Purchase"
+                ) : (
+                  "Create Purchase"
+                )}{" "}
               </Button>
+
               <Button
                 type="button"
                 onClick={() => {
@@ -845,6 +1048,26 @@ const CreatePurchase = ({ editId = null }) => {
           </form>
         </div>
       </div>
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              purchase.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className={`${ButtonConfig.backgroundColor}  ${ButtonConfig.textColor} text-black hover:bg-red-600`}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Page>
   );
 };

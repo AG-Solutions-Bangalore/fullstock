@@ -15,7 +15,6 @@ const fetchData = async (endpoint, token) => {
       "Content-Type": "application/json",
     },
   });
-  console.log(response.data, "response.json()");
   return response.data;
 };
 const createQueryConfig = (queryKey, endpoint, options = {}) => {
@@ -46,14 +45,7 @@ export const useFetchGoDown = () => {
 export const useFetchPurchaseRef = () => {
   return useQuery(createQueryConfig(["purchasesref"], "/purchases-ref"));
 };
-export const useFetchPurchaseReturnRef = () => {
-  return useQuery(
-    createQueryConfig(["purchasesreturnref"], "/purchases-return-ref")
-  );
-};
-export const useFetchSalesRef = () => {
-  return useQuery(createQueryConfig(["salesref"], "/sales-ref"));
-};
-export const useFetchSalesReturnRef = () => {
-  return useQuery(createQueryConfig(["salesreturnref"], "/sales-return-ref"));
+
+export const useFetchDispatchRef = () => {
+  return useQuery(createQueryConfig(["dispatchref"], "/dispatch-ref"));
 };

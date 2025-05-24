@@ -1,12 +1,6 @@
+import { MemoizedProductSelect } from "@/components/common/MemoizedProductSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -17,8 +11,7 @@ import {
 } from "@/components/ui/table";
 import { MinusCircle, PlusCircle, SquarePlus, Trash2 } from "lucide-react";
 import CreateItem from "../master/item/CreateItem";
-import { MemoizedProductSelect } from "@/components/common/MemoizedProductSelect";
-const SalesTable = ({
+const DispatchTable = ({
   invoiceData,
   setInvoiceData,
   addRow,
@@ -148,14 +141,14 @@ const SalesTable = ({
                   <TableCell className="p-2 ">
                     {row.id ? (
                       userType == 2 && (
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleDeleteRow(row.id)}
-                        className="text-red-500"
-                        type="button"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => handleDeleteRow(row.id)}
+                          className="text-red-500"
+                          type="button"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       )
                     ) : (
                       <Button
@@ -179,4 +172,4 @@ const SalesTable = ({
   );
 };
 
-export default SalesTable;
+export default DispatchTable;
